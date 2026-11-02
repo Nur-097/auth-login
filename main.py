@@ -81,5 +81,17 @@ def profile(request: Request):
     if not token:
         return JSONResponse(status_code=401, content={"error": "Access token required"})
 
-    # Stage 3 will verify the token with Supabase. For now we only check one was sent.
-    return {"message": "Token received (not verified yet)"}
+    try:
+        result = supabase.auth.get_user(token)
+    except Exception:
+        return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
+
+    if result is None or result.user is None:
+        return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
+
+    user = result.user
+    return {
+        "id": user.id,
+        "email": user.email,
+        "created_at": str(user.created_at),
+    }
