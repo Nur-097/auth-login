@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends, Response
 from supabase import create_client, Client
 from typing import Optional
 from fastapi.responses import JSONResponse
@@ -69,29 +69,54 @@ def login(body: Credentials):
 def public_info():
     return {"message": "Welcome stranger! This info is public."}
 
+class AuthError(Exception):
+    def __init__(self, message: str):
+        self.message = message
 
-@app.get("/protected/profile")
-def profile(request: Request):
+
+@app.exception_handler(AuthError)
+def auth_error_handler(request: Request, exc: AuthError):
+    return JSONResponse(status_code=401, content={"error": exc.message})
+
+
+def get_current_user(request: Request):
     auth_header = request.headers.get("Authorization")
-
     if not auth_header or not auth_header.startswith("Bearer "):
-        return JSONResponse(status_code=401, content={"error": "Access token required"})
+        raise AuthError("Access token required")
 
     token = auth_header.split(" ", 1)[1].strip()
     if not token:
-        return JSONResponse(status_code=401, content={"error": "Access token required"})
+        raise AuthError("Access token required")
 
     try:
         result = supabase.auth.get_user(token)
     except Exception:
-        return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
+        raise AuthError("Invalid or expired token")
 
     if result is None or result.user is None:
-        return JSONResponse(status_code=401, content={"error": "Invalid or expired token"})
+        raise AuthError("Invalid or expired token")
 
-    user = result.user
+    return result.user
+
+
+@app.get("/protected/profile")
+def profile(user=Depends(get_current_user)):
     return {
         "id": user.id,
         "email": user.email,
         "created_at": str(user.created_at),
     }
+
+
+@app.get("/protected/dashboard")
+def dashboard(user=Depends(get_current_user)):
+    return {"message": f"Welcome to your dashboard, {user.email}!"}
+
+
+@app.post("/auth/logout")
+def logout(user=Depends(get_current_user)):
+    try:
+        supabase.auth.sign_out()
+    except Exception:
+        pass
+    return Response(status_code=204)
