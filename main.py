@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from supabase import create_client, Client
 from typing import Optional
 from fastapi.responses import JSONResponse
@@ -64,3 +64,22 @@ def login(body: Credentials):
         "access_token": response.session.access_token,
         "refresh_token": response.session.refresh_token,
     }
+
+@app.get("/public/info")
+def public_info():
+    return {"message": "Welcome stranger! This info is public."}
+
+
+@app.get("/protected/profile")
+def profile(request: Request):
+    auth_header = request.headers.get("Authorization")
+
+    if not auth_header or not auth_header.startswith("Bearer "):
+        return JSONResponse(status_code=401, content={"error": "Access token required"})
+
+    token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        return JSONResponse(status_code=401, content={"error": "Access token required"})
+
+    # Stage 3 will verify the token with Supabase. For now we only check one was sent.
+    return {"message": "Token received (not verified yet)"}
